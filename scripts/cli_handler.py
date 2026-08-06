@@ -282,7 +282,7 @@ def parse_release_info(title):
     }
 
 
-def display_releases(results, top_n=5, auto_confirm=False, limit_gb=None):
+def display_releases(results, page_size=5, auto_confirm=False, limit_gb=None):
     if not results:
         print("No releases found.", file=sys.stderr)
         return None
@@ -310,27 +310,54 @@ def display_releases(results, top_n=5, auto_confirm=False, limit_gb=None):
         return None
 
     filtered.sort(key=lambda x: x["seeders"], reverse=True)
-    show_count = min(len(filtered), top_n)
+    total_results = len(filtered)
+    current_index = 0
 
-    print(f"\nFound {len(filtered)} releases (Top {show_count}):")
-    print("─" * 75)
-    for idx, item in enumerate(filtered[:show_count]):
-        print(f"  [{idx + 1}] {item['title']}")
-        print(f"      Audio: [{item['audio']:<15}] | Subs: [{item['subs']:<10}] | Quality: {item['quality']}")
-        print(f"      Size:  {item['size_str']:<10}      | Seeders: {item['seeders']:<5}      | Source:  {item['indexer']}\n")
+    while current_index < total_results:
+        end_index = min(current_index + page_size, total_results)
+        show_batch = filtered[current_index:end_index]
 
-    choice = 0
-    if not auto_confirm and show_count > 1:
+        print(f"\nFound {total_results} releases (Showing {current_index + 1}-{end_index}):")
+        print("─" * 75)
+        for offset, item in enumerate(show_batch):
+            idx = current_index + offset + 1
+            print(f"  [{idx}] {item['title']}")
+            print(f"      Audio: [{item['audio']:<15}] | Subs: [{item['subs']:<10}] | Quality: {item['quality']}")
+            print(f"      Size:  {item['size_str']:<10}      | Seeders: {item['seeders']:<5}      | Source:  {item['indexer']}\n")
+
+        if auto_confirm:
+            selected = filtered[0]
+            print(f"Auto-selected top release: {selected['title']}")
+            return selected
+
+        has_more = end_index < total_results
+        prompt_range = f"[{current_index + 1}-{end_index}]"
+        more_hint = ", or 'm' to load more" if has_more else ""
+
         try:
-            choice_str = input(f"Select release to download [1-{show_count}] (default 1): ").strip()
-            choice = int(choice_str) - 1 if choice_str and choice_str.isdigit() and 1 <= int(choice_str) <= show_count else 0
-        except Exception:
-            choice = 0
+            choice_str = input(f"Select release to download {prompt_range}{more_hint} (default {current_index + 1}): ").strip().lower()
 
-    selected = filtered[choice]
-    print(f"\nSelected Release:")
-    print(f"Title:   {selected['title']}\nAudio:   [{selected['audio']}]\nSubs:    [{selected['subs']}]\nQuality: {selected['quality']}\nSize:    {selected['size_str']} | Seeders: {selected['seeders']} | Source: {selected['indexer']}")
-    return selected
+            if choice_str in ("m", "more", "+", "next") and has_more:
+                current_index = end_index
+                continue
+
+            if choice_str.isdigit():
+                val = int(choice_str) - 1
+                if 0 <= val < total_results:
+                    selected = filtered[val]
+                    print(f"\nSelected Release:")
+                    print(f"Title:   {selected['title']}\nAudio:   [{selected['audio']}]\nSubs:    [{selected['subs']}]\nQuality: {selected['quality']}\nSize:    {selected['size_str']} | Seeders: {selected['seeders']} | Source: {selected['indexer']}")
+                    return selected
+
+            selected = filtered[current_index]
+            print(f"\nSelected Release:")
+            print(f"Title:   {selected['title']}\nAudio:   [{selected['audio']}]\nSubs:    [{selected['subs']}]\nQuality: {selected['quality']}\nSize:    {selected['size_str']} | Seeders: {selected['seeders']} | Source: {selected['indexer']}")
+            return selected
+        except (KeyboardInterrupt, EOFError):
+            print("\nSelection cancelled.", file=sys.stderr)
+            return None
+
+    return None
 
 
 def search_interactive(query, category="tv", limit_gb=None, auto_confirm=False):
