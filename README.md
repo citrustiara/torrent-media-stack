@@ -7,6 +7,7 @@ A portable, single-command media automation & torrenting stack bundled with a un
 ## 📋 Table of Contents
 - [Features](#features)
 - [Safe Sources vs. Unsafe Sources](#-safe-sources-vs-unsafe-sources)
+- [Prerequisites & Compatibility](#%EF%B8%8F-prerequisites--compatibility)
 - [Quick Start](#-quick-start)
 - [Web UI Guide (Movies, TV & Anime)](#-web-ui-guide-movies-tv--anime)
 - [Terminal CLI Request Guide](#-terminal-cli-request-guide)
@@ -47,6 +48,21 @@ A portable, single-command media automation & torrenting stack bundled with a un
 ### Excluded Unsafe Sources ❌
 * ❌ **The Pirate Bay (TPB)**: Excluded due to unmoderated uploaders, fake verified badges, and high risk of malware/crypto-miners in `.exe`/`.iso` downloads.
 * ❌ **IGG-Games**: Excluded due to history of malware bundling, ad-redirect abuses, and DRM watermarking.
+
+---
+
+## ⚙️ Prerequisites & Compatibility
+
+* **Docker Engine / Docker Desktop**: **Docker must be running in the background** before initializing or running the stack.
+* **Linux & macOS**: Supported natively out of the box via bash terminal.
+* **Windows Guidance**:
+  * Run the `./media-stack` CLI using **WSL (Windows Subsystem for Linux)** or **Git Bash**.
+  * Alternatively, run equivalent commands directly in PowerShell or Command Prompt:
+    ```powershell
+    docker compose up -d
+    python scripts/provision_stack.py
+    python scripts/cli_handler.py <command> <args>
+    ```
 
 ---
 
