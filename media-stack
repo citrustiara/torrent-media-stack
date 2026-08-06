@@ -17,6 +17,7 @@ show_help() {
   echo "  request <name>          Request TV series / Anime"
   echo "  request-movie <name>    Request Movie"
   echo "  request-game <name>     Search & download PC Game (FitGirl/DODI repacks/ISOs)"
+  echo "  search <name>           Interactively search releases (Anime, TV, Movies, Games)"
   echo ""
 }
 
@@ -99,7 +100,7 @@ case "$1" in
     docker compose -f "$STACK_DIR/docker-compose.yml" logs -f
     ;;
 
-  request|request-movie|request-game)
+  request|request-movie|request-game|search)
     cmd="$1"
     shift
     python3 "$STACK_DIR/scripts/cli_handler.py" "$cmd" "$@"

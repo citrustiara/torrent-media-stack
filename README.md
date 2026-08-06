@@ -146,16 +146,44 @@ Source: 1337x
 ✓ Download queued successfully in qBittorrent under category 'games'!
 ```
 
-#### Non-Interactive / Auto-Confirm Flag (`-y` / `--yes`):
-To automatically select the top-seeded game release without asking for confirmation:
+### 4. Interactive Search (All Media Types)
+You can interactively search safe indexers for any release (Anime, TV, Movies, Games) directly in your terminal:
 ```bash
-./media-stack request-game "Elden Ring" -y
+./media-stack search "Chainsaw Man" --category anime
+./media-stack request "Chainsaw Man" --type anime -i
+```
+
+#### Screen Output Format:
+When searching, the CLI parses and displays release options with clean **Type** (`[SUB]`, `[DUB]`, `[DUAL AUDIO]`), **Quality** (`1080p`, `4K`, `BluRay`, `HEVC`), **Size**, **Seeders**, and **Source**:
+
+```text
+Found 5 releases (Top 5):
+──────────────────────────────────────────────────────────────────────
+  [1] Chainsaw.Man.S01.1080p.Dual.Audio.BD.x265-Judas
+      Type: [DUAL AUDIO]   | Quality: 1080p | BluRay | x265/HEVC
+      Size: 4.20 GB     | Seeders: 215   | Source: Nyaa.si
+
+  [2] [SubsPlease] Chainsaw Man - 01-12 (1080p) [AAC]
+      Type: [SUB]          | Quality: 1080p
+      Size: 3.80 GB     | Seeders: 180   | Source: Nyaa.si
+
+  [3] Chainsaw Man S01 1080p Dual Audio BDRip x264
+      Type: [DUAL AUDIO]   | Quality: 1080p | BluRay | x264
+      Size: 12.40 GB    | Seeders: 94    | Source: 1337x
+
+Select release to download [1-5] (default 1): 1
+```
+
+#### Non-Interactive / Auto-Confirm Flag (`-y` / `--yes`):
+To automatically select the top-seeded release without asking for confirmation:
+```bash
+./media-stack search "Chainsaw Man" -y
 ```
 
 #### Limit Size Flag (`-l` / `--limit`):
 To set a custom maximum file size limit in GB (default: 100 GB):
 ```bash
-./media-stack request-game "GTA V" --limit 75
+./media-stack search "GTA V" --category games --limit 75
 ```
 
 ---
