@@ -96,10 +96,14 @@ You can also request content directly from your command line without opening a b
 # Standard TV Series:
 ./media-stack request "Breaking Bad"
 
-# Anime Series:
+# Anime Series (Subbed by default, or explicitly with --sub):
 ./media-stack request "Chainsaw Man" --type anime
+./media-stack request "Chainsaw Man" --type anime --sub
+
+# Anime Series with English Dub / Dual Audio preference:
+./media-stack request "Chainsaw Man" --type anime --dub
 ```
-* **What it does**: Connects to Sonarr/TVDB, monitors the series, and instructs Sonarr to auto-grab episodes from safe indexers.
+* **What it does**: Connects to Sonarr/TVDB, monitors the series, and instructs Sonarr to auto-grab episodes from safe indexers. Subbed (Japanese audio + English subtitles) is the default release format for anime indexers like Nyaa. The `--dub` flag configures Sonarr to automatically prefer English Dub / Dual Audio releases (`Dual Audio`, `Dub`, `English Dub`).
 
 ---
 

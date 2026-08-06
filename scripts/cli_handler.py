@@ -82,7 +82,43 @@ def add_to_qbittorrent(magnet_or_url, category="tv", save_path=None):
         return False
 
 
-def request_tv(query, series_type="anime", quality_id=4):
+def ensure_dub_tag_and_profile(headers):
+    try:
+        tags = make_request(f"{SONARR_URL}/tag", headers=headers)
+        dub_tag = next((t for t in tags if t.get("label") == "dub"), None)
+        if not dub_tag:
+            dub_tag = make_request(f"{SONARR_URL}/tag", method="POST", headers=headers, data={"label": "dub"})
+        tag_id = dub_tag.get("id")
+
+        profiles = make_request(f"{SONARR_URL}/releaseprofile", headers=headers)
+        dub_profile = next((p for p in profiles if p.get("name") == "Dub Preferred"), None)
+        if not dub_profile:
+            new_profile = {
+                "name": "Dub Preferred",
+                "enabled": True,
+                "indexerId": 0,
+                "tags": [tag_id] if tag_id else [],
+                "mustContain": "",
+                "mustNotContain": "",
+                "preferred": [
+                    {"key": "Dual Audio", "value": 100},
+                    {"key": "Dual-Audio", "value": 100},
+                    {"key": "Dub", "value": 100},
+                    {"key": "English Dub", "value": 100},
+                ],
+            }
+            make_request(f"{SONARR_URL}/releaseprofile", method="POST", headers=headers, data=new_profile)
+        elif tag_id and tag_id not in dub_profile.get("tags", []):
+            dub_profile["tags"].append(tag_id)
+            make_request(f"{SONARR_URL}/releaseprofile/{dub_profile['id']}", method="PUT", headers=headers, data=dub_profile)
+
+        return tag_id
+    except Exception as e:
+        print(f"Warning: Could not configure dub profile in Sonarr: {e}", file=sys.stderr)
+        return None
+
+
+def request_tv(query, series_type="anime", quality_id=4, dub=False):
     if not SONARR_API_KEY:
         print("Error: SONARR_API_KEY is not set. Run `./media-stack up` first.", file=sys.stderr)
         sys.exit(1)
@@ -101,9 +137,16 @@ def request_tv(query, series_type="anime", quality_id=4):
     series["monitored"] = True
     series["addOptions"] = {"searchForMissingEpisodes": True, "monitor": "all"}
 
+    if dub:
+        tag_id = ensure_dub_tag_and_profile(headers)
+        if tag_id:
+            series["tags"] = [tag_id]
+            print("✓ English Dub / Dual Audio release preference applied.")
+
     print(f"Adding '{series.get('title')}' ({series.get('year')}) to Sonarr...")
     added = make_request(f"{SONARR_URL}/series", method="POST", headers=headers, data=series)
     print(f"✓ Added series: {added.get('title')}. Sonarr will manage & download episodes via safe indexers.")
+
 
 
 def request_movie(query, quality_id=1):
@@ -184,6 +227,8 @@ def main():
     tv_p = subparsers.add_parser("request")
     tv_p.add_argument("query", help="Series name")
     tv_p.add_argument("--type", default="standard", choices=["standard", "anime"])
+    tv_p.add_argument("--dub", action="store_true", help="Prefer English Dub / Dual Audio releases")
+    tv_p.add_argument("--sub", action="store_true", help="Prefer Subbed (Japanese Audio + English Subtitles) releases (default)")
 
     # Movie parser
     movie_p = subparsers.add_parser("request-movie")
@@ -198,7 +243,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "request":
-        request_tv(args.query, series_type=args.type)
+        request_tv(args.query, series_type=args.type, dub=args.dub)
     elif args.command == "request-movie":
         request_movie(args.query)
     elif args.command == "request-game":
