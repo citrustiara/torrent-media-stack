@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -e
+
+STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$STACK_DIR/.env"
+ENV_EXAMPLE="$STACK_DIR/.env.example"
+
+show_help() {
+  echo "Usage: ./media-stack <command> [options]"
+  echo ""
+  echo "Commands:"
+  echo "  init [--dest <path>]    Initialize stack configuration & media destination folder"
+  echo "  up                      Start Docker services & auto-provision safe indexers"
+  echo "  down                    Stop Docker services"
+  echo "  status                  Check stack health and print Web UI access links"
+  echo "  logs                    Tail container logs"
+  echo "  request <name>          Request TV series / Anime"
+  echo "  request-movie <name>    Request Movie"
+  echo "  request-game <name>     Search & download PC Game (FitGirl/DODI repacks/ISOs)"
+  echo ""
+}
+
+if [ -z "$1" ]; then
+  show_help
+  exit 0
+fi
+
+case "$1" in
+  init)
+    DEST_DIR=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --dest)
+          DEST_DIR="$2"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+
+    if [ -z "$DEST_DIR" ]; then
+      read -p "Enter destination path for media storage (default: ./data): " DEST_DIR
+      DEST_DIR="${DEST_DIR:-./data}"
+    fi
+
+    # Expand tilde or relative paths to absolute
+    DEST_DIR=$(eval echo "$DEST_DIR")
+    mkdir -p "$DEST_DIR/movies" "$DEST_DIR/tv" "$DEST_DIR/anime" "$DEST_DIR/games" "$DEST_DIR/torrents"
+    ABS_DEST="$(cd "$DEST_DIR" && pwd)"
+
+    if [ ! -f "$ENV_FILE" ]; then
+      cp "$ENV_EXAMPLE" "$ENV_FILE"
+    fi
+
+    # Replace or set MEDIA_ROOT in .env
+    if grep -q "^MEDIA_ROOT=" "$ENV_FILE"; then
+      sed -i.bak "s|^MEDIA_ROOT=.*|MEDIA_ROOT=$ABS_DEST|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+    else
+      echo "MEDIA_ROOT=$ABS_DEST" >> "$ENV_FILE"
+    fi
+
+    echo "✓ Initialized stack! Media storage path set to: $ABS_DEST"
+    echo "  Created directories: /movies, /tv, /anime, /games, /torrents"
+    ;;
+
+  up)
+    if [ ! -f "$ENV_FILE" ]; then
+      echo "Initializing with default directory './data'..."
+      "$0" init --dest ./data
+    fi
+
+    echo "Starting Docker Compose services..."
+    docker compose -f "$STACK_DIR/docker-compose.yml" up -d
+
+    echo "Running automatic stack provisioner..."
+    python3 "$STACK_DIR/scripts/provision_stack.py"
+    ;;
+
+  down)
+    docker compose -f "$STACK_DIR/docker-compose.yml" down
+    echo "✓ Stopped all media stack services."
+    ;;
+
+  status)
+    echo "=== Container Status ==="
+    docker compose -f "$STACK_DIR/docker-compose.yml" ps
+    echo ""
+    echo "=== Web Interfaces ==="
+    echo "🍿 Jellyseerr (Request UI): http://localhost:5055"
+    echo "📺 Sonarr (TV/Anime):       http://localhost:8989"
+    echo "🎬 Radarr (Movies):         http://localhost:7878"
+    echo "🔍 Prowlarr (Indexers):     http://localhost:9696"
+    echo "⚡ qBittorrent (Downloads): http://localhost:8080"
+    ;;
+
+  logs)
+    docker compose -f "$STACK_DIR/docker-compose.yml" logs -f
+    ;;
+
+  request|request-movie|request-game)
+    cmd="$1"
+    shift
+    python3 "$STACK_DIR/scripts/cli_handler.py" "$cmd" "$@"
+    ;;
+
+  *)
+    show_help
+    exit 1
+    ;;
+esac

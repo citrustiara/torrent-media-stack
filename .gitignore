@@ -1,0 +1,14 @@
+# Environment & Secret files
+.env
+*.env.bak
+
+# Docker volume state & runtime config data
+config/
+data/
+
+# OS / Editor generated files
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
+*.pyc
