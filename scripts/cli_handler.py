@@ -175,16 +175,74 @@ def request_movie(query, quality_id=1):
 def parse_release_info(title):
     t_lower = title.lower()
 
-    # 1. Audio / Sub Type
-    audio_type = "SUB"
-    if any(k in t_lower for k in ["dual audio", "dual-audio", "multi-audio", "multi audio", "multi-lang", "multi lang"]):
-        audio_type = "DUAL AUDIO"
-    elif any(k in t_lower for k in ["dubbed", " english dub", " eng dub", "[dub]", "(dub)", " dub "]):
-        audio_type = "DUB"
-    elif any(k in t_lower for k in ["subbed", " english sub", " eng sub", "[sub]", "(sub)", " sub ", "subsplease", "erai-raws"]):
-        audio_type = "SUB"
+    # --- 1. Audio Track & Language Detection ---
+    audio_list = []
+    if any(k in t_lower for k in ["dual audio", "dual-audio", "dual_audio", "dual.audio"]):
+        audio_list.append("DUAL (JAP/ENG)")
+    elif any(k in t_lower for k in ["multi audio", "multi-audio", "multi_audio", "multi.audio", "multi-lang", "multilang"]):
+        audio_list.append("MULTI AUDIO")
+    else:
+        lang_audio = []
+        if any(k in t_lower for k in ["jap", "japanese", "jp"]):
+            lang_audio.append("JAP")
+        if any(k in t_lower for k in ["eng", "english", "dub", "dubbed"]):
+            lang_audio.append("ENG")
+        if any(k in t_lower for k in ["spa", "spanish", "esp", "español", "latam"]):
+            lang_audio.append("SPA")
+        if any(k in t_lower for k in ["fre", "french", "vostfr", "truefrench"]):
+            lang_audio.append("FRE")
+        if any(k in t_lower for k in ["ger", "german", "deu", "deutsch"]):
+            lang_audio.append("GER")
+        if any(k in t_lower for k in ["ita", "italian"]):
+            lang_audio.append("ITA")
+        if any(k in t_lower for k in ["pol", "polish", "pl"]):
+            lang_audio.append("POL")
+        if any(k in t_lower for k in ["rus", "russian"]):
+            lang_audio.append("RUS")
+        if any(k in t_lower for k in ["por", "portuguese", "pt", "br"]):
+            lang_audio.append("POR")
 
-    # 2. Resolution
+        if len(lang_audio) > 1:
+            audio_list.append(f"DUAL ({'/'.join(lang_audio)})")
+        elif len(lang_audio) == 1:
+            audio_list.append(lang_audio[0])
+        else:
+            if any(k in t_lower for k in ["subsplease", "erai-raws", "horriblesubs", "judas"]):
+                audio_list.append("JAP")
+            else:
+                audio_list.append("DEFAULT")
+
+    audio_str = "/".join(audio_list)
+
+    # --- 2. Subtitle Track & Language Detection ---
+    subs_list = []
+    if any(k in t_lower for k in ["multi-sub", "multi sub", "multisub", "multi-subs", "multisubs"]):
+        subs_list.append("MULTI")
+    else:
+        sub_langs = []
+        if any(k in t_lower for k in ["eng sub", "english sub", "eng subs", "english subs", "softsub", "hardsub", "subbed", "subsplease", "erai-raws", "judas", "[sub]", "(sub)"]):
+            sub_langs.append("ENG")
+        if any(k in t_lower for k in ["spa sub", "spanish sub", "esp sub", "sub español"]):
+            sub_langs.append("SPA")
+        if any(k in t_lower for k in ["fre sub", "french sub", "vostfr"]):
+            sub_langs.append("FRE")
+        if any(k in t_lower for k in ["ger sub", "german sub"]):
+            sub_langs.append("GER")
+        if any(k in t_lower for k in ["pol sub", "polish sub", "napisy"]):
+            sub_langs.append("POL")
+        if any(k in t_lower for k in ["rus sub", "russian sub"]):
+            sub_langs.append("RUS")
+
+        if sub_langs:
+            subs_list.append("/".join(sub_langs))
+        elif any(k in t_lower for k in ["raw", "no sub"]):
+            subs_list.append("RAW (NO SUBS)")
+        else:
+            subs_list.append("ENG")
+
+    subs_str = "/".join(subs_list)
+
+    # --- 3. Quality & Resolution ---
     if "2160p" in t_lower or "4k" in t_lower or "uhd" in t_lower:
         res = "4K/2160p"
     elif "1080p" in t_lower:
@@ -196,7 +254,6 @@ def parse_release_info(title):
     else:
         res = "HD"
 
-    # 3. Source
     source = ""
     if any(k in t_lower for k in ["bluray", "blu-ray", "bdrip", "brrip", "bd"]):
         source = "BluRay"
@@ -207,7 +264,6 @@ def parse_release_info(title):
     elif "repack" in t_lower:
         source = "Repack"
 
-    # 4. Codec
     codec = ""
     if any(k in t_lower for k in ["hevc", "x265", "h265", "h.265"]):
         codec = "x265/HEVC"
@@ -220,7 +276,8 @@ def parse_release_info(title):
     quality_str = " | ".join(quality_parts)
 
     return {
-        "audio": audio_type,
+        "audio": audio_str,
+        "subs": subs_str,
         "quality": quality_str
     }
 
@@ -243,6 +300,7 @@ def display_releases(results, top_n=5, auto_confirm=False, limit_gb=100.0):
             "seeders": item.get("seeders", 0),
             "indexer": item.get("indexer"),
             "audio": parsed["audio"],
+            "subs": parsed["subs"],
             "quality": parsed["quality"],
             "guid": item.get("guid") or item.get("downloadUrl"),
         })
@@ -255,12 +313,11 @@ def display_releases(results, top_n=5, auto_confirm=False, limit_gb=100.0):
     show_count = min(len(filtered), top_n)
 
     print(f"\nFound {len(filtered)} releases (Top {show_count}):")
-    print("─" * 70)
+    print("─" * 75)
     for idx, item in enumerate(filtered[:show_count]):
-        audio_badge = f"[{item['audio']}]"
         print(f"  [{idx + 1}] {item['title']}")
-        print(f"      Type: {audio_badge:<14} | Quality: {item['quality']}")
-        print(f"      Size: {item['size_str']:<10} | Seeders: {item['seeders']:<5} | Source: {item['indexer']}\n")
+        print(f"      Audio: [{item['audio']:<15}] | Subs: [{item['subs']:<10}] | Quality: {item['quality']}")
+        print(f"      Size:  {item['size_str']:<10}      | Seeders: {item['seeders']:<5}      | Source:  {item['indexer']}\n")
 
     choice = 0
     if not auto_confirm and show_count > 1:
@@ -272,7 +329,7 @@ def display_releases(results, top_n=5, auto_confirm=False, limit_gb=100.0):
 
     selected = filtered[choice]
     print(f"\nSelected Release:")
-    print(f"Title: {selected['title']}\nType: [{selected['audio']}] | Quality: {selected['quality']}\nSize: {selected['size_str']} | Seeders: {selected['seeders']} | Source: {selected['indexer']}")
+    print(f"Title:   {selected['title']}\nAudio:   [{selected['audio']}]\nSubs:    [{selected['subs']}]\nQuality: {selected['quality']}\nSize:    {selected['size_str']} | Seeders: {selected['seeders']} | Source: {selected['indexer']}")
     return selected
 
 
