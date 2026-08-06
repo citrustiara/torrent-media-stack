@@ -1,4 +1,4 @@
-# Torrent Media Stack 🚀
+# Torrent Media Stack
 
 A portable, single-command media automation & torrenting stack bundled with a unified CLI. Supports **Movies**, **TV Shows**, **Anime**, and **PC Games** with safe, curated indexers vetted by the r/Piracy Megathread.
 
