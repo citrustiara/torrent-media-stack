@@ -171,7 +171,16 @@ Found 5 releases (Top 5):
       Type: [DUAL AUDIO]   | Quality: 1080p | BluRay | x264
       Size: 12.40 GB    | Seeders: 94    | Source: 1337x
 
-Select release to download [1-5] (default 1): 1
+Select release to download [1-5], or 'm' to load more (default 1): m
+```
+
+#### Pagination ("Load More" Results):
+If the initial 5 results are not what you are looking for, type **`m`** (or **`more`**) at the prompt to load and display the next batch of results (e.g. results 6–10).
+
+#### Custom Result Batch Size (`-n` / `--top`):
+Specify how many results to display per page (default: 5):
+```bash
+./media-stack search "Chainsaw Man" --category anime -n 10
 ```
 
 #### Non-Interactive / Auto-Confirm Flag (`-y` / `--yes`):
@@ -180,8 +189,8 @@ To automatically select the top-seeded release without asking for confirmation:
 ./media-stack search "Chainsaw Man" -y
 ```
 
-#### Limit Size Flag (`-l` / `--limit`):
-To set a custom maximum file size limit in GB (default: 100 GB):
+#### Optional Limit Size Flag (`-l` / `--limit`):
+To set an optional maximum file size limit in GB:
 ```bash
 ./media-stack search "GTA V" --category games --limit 75
 ```

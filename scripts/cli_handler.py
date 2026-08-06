@@ -360,7 +360,7 @@ def display_releases(results, page_size=5, auto_confirm=False, limit_gb=None):
     return None
 
 
-def search_interactive(query, category="tv", limit_gb=None, auto_confirm=False):
+def search_interactive(query, category="tv", limit_gb=None, auto_confirm=False, page_size=5):
     if not PROWLARR_API_KEY:
         print("Error: PROWLARR_API_KEY is not set. Run `./media-stack up` first.", file=sys.stderr)
         sys.exit(1)
@@ -369,16 +369,16 @@ def search_interactive(query, category="tv", limit_gb=None, auto_confirm=False):
     print(f"Searching indexers for '{query}'...")
     results = make_request(f"{PROWLARR_URL}/search?query={urllib.parse.quote(query)}", headers=headers)
 
-    selected = display_releases(results, auto_confirm=auto_confirm, limit_gb=limit_gb)
+    selected = display_releases(results, page_size=page_size, auto_confirm=auto_confirm, limit_gb=limit_gb)
     if selected:
         save_dir = f"/data/{category}"
         add_to_qbittorrent(selected["guid"], category=category, save_path=save_dir)
 
 
-def request_tv(query, series_type="anime", quality_id=4, dub=False, interactive=False):
+def request_tv(query, series_type="anime", quality_id=4, dub=False, interactive=False, page_size=5):
     if interactive:
         search_query = f"{query} Dub" if dub else query
-        search_interactive(search_query, category="anime" if series_type == "anime" else "tv")
+        search_interactive(search_query, category="anime" if series_type == "anime" else "tv", page_size=page_size)
         return
 
     if not SONARR_API_KEY:
@@ -410,9 +410,9 @@ def request_tv(query, series_type="anime", quality_id=4, dub=False, interactive=
     print(f"✓ Added series: {added.get('title')}. Sonarr will manage & download episodes via safe indexers.")
 
 
-def request_movie(query, quality_id=1, interactive=False):
+def request_movie(query, quality_id=1, interactive=False, page_size=5):
     if interactive:
-        search_interactive(query, category="movies")
+        search_interactive(query, category="movies", page_size=page_size)
         return
 
     if not RADARR_API_KEY:
@@ -437,8 +437,8 @@ def request_movie(query, quality_id=1, interactive=False):
     print(f"✓ Added movie: {added.get('title')}. Radarr will monitor and download it automatically.")
 
 
-def request_game(query, limit_gb=None, auto_confirm=False):
-    search_interactive(query, category="games", limit_gb=limit_gb, auto_confirm=auto_confirm)
+def request_game(query, limit_gb=None, auto_confirm=False, page_size=5):
+    search_interactive(query, category="games", limit_gb=limit_gb, auto_confirm=auto_confirm, page_size=page_size)
 
 
 def main():
@@ -452,17 +452,20 @@ def main():
     tv_p.add_argument("--dub", action="store_true", help="Prefer English Dub / Dual Audio releases")
     tv_p.add_argument("--sub", action="store_true", help="Prefer Subbed (Japanese Audio + English Subtitles) releases (default)")
     tv_p.add_argument("-i", "--interactive", action="store_true", help="Interactively search indexers & pick release manually")
+    tv_p.add_argument("-n", "--top", type=int, default=5, help="Number of results to show per page (default: 5)")
 
     # Movie parser
     movie_p = subparsers.add_parser("request-movie")
     movie_p.add_argument("query", help="Movie name")
     movie_p.add_argument("-i", "--interactive", action="store_true", help="Interactively search indexers & pick release manually")
+    movie_p.add_argument("-n", "--top", type=int, default=5, help="Number of results to show per page (default: 5)")
 
     # Game parser
     game_p = subparsers.add_parser("request-game")
     game_p.add_argument("query", help="Game name")
     game_p.add_argument("-y", "--yes", action="store_true", help="Auto-confirm the top result")
     game_p.add_argument("-l", "--limit", type=float, default=None, help="Max release size limit in GB (optional)")
+    game_p.add_argument("-n", "--top", type=int, default=5, help="Number of results to show per page (default: 5)")
 
     # General Search parser
     search_p = subparsers.add_parser("search")
@@ -470,17 +473,18 @@ def main():
     search_p.add_argument("--category", default="tv", choices=["tv", "anime", "movies", "games"])
     search_p.add_argument("-y", "--yes", action="store_true", help="Auto-confirm the top result")
     search_p.add_argument("-l", "--limit", type=float, default=None, help="Max release size limit in GB (optional)")
+    search_p.add_argument("-n", "--top", type=int, default=5, help="Number of results to show per page (default: 5)")
 
     args = parser.parse_args()
 
     if args.command == "request":
-        request_tv(args.query, series_type=args.type, dub=args.dub, interactive=args.interactive)
+        request_tv(args.query, series_type=args.type, dub=args.dub, interactive=args.interactive, page_size=args.top)
     elif args.command == "request-movie":
-        request_movie(args.query, interactive=args.interactive)
+        request_movie(args.query, interactive=args.interactive, page_size=args.top)
     elif args.command == "request-game":
-        request_game(args.query, limit_gb=args.limit, auto_confirm=args.yes)
+        request_game(args.query, limit_gb=args.limit, auto_confirm=args.yes, page_size=args.top)
     elif args.command == "search":
-        search_interactive(args.query, category=args.category, limit_gb=args.limit, auto_confirm=args.yes)
+        search_interactive(args.query, category=args.category, limit_gb=args.limit, auto_confirm=args.yes, page_size=args.top)
     else:
         parser.print_help()
 
