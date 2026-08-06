@@ -282,7 +282,7 @@ def parse_release_info(title):
     }
 
 
-def display_releases(results, top_n=5, auto_confirm=False, limit_gb=100.0):
+def display_releases(results, top_n=5, auto_confirm=False, limit_gb=None):
     if not results:
         print("No releases found.", file=sys.stderr)
         return None
@@ -290,7 +290,7 @@ def display_releases(results, top_n=5, auto_confirm=False, limit_gb=100.0):
     filtered = []
     for item in results:
         size_gb = item.get("size", 0) / (1024 ** 3)
-        if size_gb > limit_gb:
+        if limit_gb is not None and size_gb > limit_gb:
             continue
         size_str = f"{size_gb:.2f} GB" if size_gb >= 1.0 else f"{item.get('size', 0) / (1024 ** 2):.1f} MB"
         parsed = parse_release_info(item.get("title", ""))
@@ -306,7 +306,7 @@ def display_releases(results, top_n=5, auto_confirm=False, limit_gb=100.0):
         })
 
     if not filtered:
-        print(f"No releases found under size limit ({limit_gb:.0f} GB).", file=sys.stderr)
+        print(f"No releases found under size limit ({limit_gb:.0f} GB)." if limit_gb else "No releases found.", file=sys.stderr)
         return None
 
     filtered.sort(key=lambda x: x["seeders"], reverse=True)
@@ -333,7 +333,7 @@ def display_releases(results, top_n=5, auto_confirm=False, limit_gb=100.0):
     return selected
 
 
-def search_interactive(query, category="tv", limit_gb=100.0, auto_confirm=False):
+def search_interactive(query, category="tv", limit_gb=None, auto_confirm=False):
     if not PROWLARR_API_KEY:
         print("Error: PROWLARR_API_KEY is not set. Run `./media-stack up` first.", file=sys.stderr)
         sys.exit(1)
@@ -410,7 +410,7 @@ def request_movie(query, quality_id=1, interactive=False):
     print(f"✓ Added movie: {added.get('title')}. Radarr will monitor and download it automatically.")
 
 
-def request_game(query, limit_gb=100.0, auto_confirm=False):
+def request_game(query, limit_gb=None, auto_confirm=False):
     search_interactive(query, category="games", limit_gb=limit_gb, auto_confirm=auto_confirm)
 
 
@@ -435,14 +435,14 @@ def main():
     game_p = subparsers.add_parser("request-game")
     game_p.add_argument("query", help="Game name")
     game_p.add_argument("-y", "--yes", action="store_true", help="Auto-confirm the top result")
-    game_p.add_argument("-l", "--limit", type=float, default=100.0, help="Max release size limit in GB")
+    game_p.add_argument("-l", "--limit", type=float, default=None, help="Max release size limit in GB (optional)")
 
     # General Search parser
     search_p = subparsers.add_parser("search")
     search_p.add_argument("query", help="Search query")
     search_p.add_argument("--category", default="tv", choices=["tv", "anime", "movies", "games"])
     search_p.add_argument("-y", "--yes", action="store_true", help="Auto-confirm the top result")
-    search_p.add_argument("-l", "--limit", type=float, default=100.0, help="Max release size limit in GB")
+    search_p.add_argument("-l", "--limit", type=float, default=None, help="Max release size limit in GB (optional)")
 
     args = parser.parse_args()
 
