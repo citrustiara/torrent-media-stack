@@ -89,11 +89,12 @@ case "$1" in
     docker compose -f "$STACK_DIR/docker-compose.yml" ps
     echo ""
     echo "=== Web Interfaces ==="
-    echo "🍿 Jellyseerr (Request UI): http://localhost:5055"
-    echo "📺 Sonarr (TV/Anime):       http://localhost:8989"
-    echo "🎬 Radarr (Movies):         http://localhost:7878"
-    echo "🔍 Prowlarr (Indexers):     http://localhost:9696"
-    echo "⚡ qBittorrent (Downloads): http://localhost:8080"
+    echo "🎥 Jellyfin (Media Streaming): http://localhost:8096"
+    echo "🍿 Jellyseerr (Request UI):    http://localhost:5055"
+    echo "📺 Sonarr (TV/Anime):          http://localhost:8989"
+    echo "🎬 Radarr (Movies):            http://localhost:7878"
+    echo "🔍 Prowlarr (Indexers):        http://localhost:9696"
+    echo "⚡ qBittorrent (Downloads):    http://localhost:8080"
     ;;
 
   logs)

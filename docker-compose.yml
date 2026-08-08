@@ -87,3 +87,24 @@ services:
       - prowlarr
     networks:
       - media-network
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - ./config/jellyfin:/config
+      - ${MEDIA_ROOT:-./data}:/data
+    ports:
+      - ${JELLYFIN_PORT:-8096}:8096
+    restart: unless-stopped
+    networks:
+      - media-network
+
