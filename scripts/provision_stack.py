@@ -25,7 +25,7 @@ PROWLARR_INDEXERS = [
     item.strip()
     for item in os.environ.get(
         "PROWLARR_INDEXERS",
-        "1337x,Nyaa.si,TorrentGalaxy,EZTV,YTS,LimeTorrents,RuTracker",
+        "1337x,Nyaa.si,TorrentGalaxy,EZTV,YTS,RuTracker",
     ).split(",")
     if item.strip()
 ]
