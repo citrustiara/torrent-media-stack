@@ -12,6 +12,14 @@ import xml.etree.ElementTree as ET
 CONFIG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "config"))
 ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+if os.path.exists(ENV_PATH):
+    with open(ENV_PATH, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ[k.strip()] = v.strip()
+
 SONARR_URL = os.environ.get("SONARR_URL", "http://localhost:8989/api/v3")
 RADARR_URL = os.environ.get("RADARR_URL", "http://localhost:7878/api/v3")
 PROWLARR_URL = os.environ.get("PROWLARR_URL", "http://localhost:9696/api/v1")
@@ -55,7 +63,7 @@ def extract_or_load_keys():
     return keys
 
 
-def make_request(url, method="GET", headers=None, data=None, timeout=15):
+def make_request(url, method="GET", headers=None, data=None, timeout=15, silent=False):
     request_headers = dict(headers or {})
     req_data = None
     if data is not None:
@@ -68,27 +76,56 @@ def make_request(url, method="GET", headers=None, data=None, timeout=15):
             body = response.read().decode("utf-8")
             return json.loads(body) if body else {}
     except urllib.error.HTTPError as e:
-        print(f"HTTP {e.code} for {url}: {e.read().decode('utf-8')}", file=sys.stderr)
+        if not silent:
+            print(f"HTTP {e.code} for {url}: {e.read().decode('utf-8')}", file=sys.stderr)
         raise
     except Exception as e:
-        print(f"Error connecting to {url}: {e}", file=sys.stderr)
+        if not silent:
+            print(f"Error connecting to {url}: {e}", file=sys.stderr)
         raise
+
+
+def is_service_online(url, api_key):
+    if not api_key:
+        return False
+    try:
+        make_request(f"{url}/system/status", headers={"X-Api-Key": api_key}, timeout=2, silent=True)
+        return True
+    except Exception:
+        return False
 
 
 def wait_for_apis(keys):
-    print("Waiting for Sonarr, Radarr, and Prowlarr services to become responsive...")
-    for _ in range(45):
-        try:
-            if keys.get("SONARR_API_KEY"):
-                make_request(f"{SONARR_URL}/system/status", headers={"X-Api-Key": keys["SONARR_API_KEY"]})
-            if keys.get("RADARR_API_KEY"):
-                make_request(f"{RADARR_URL}/system/status", headers={"X-Api-Key": keys["RADARR_API_KEY"]})
-            if keys.get("PROWLARR_API_KEY"):
-                make_request(f"{PROWLARR_URL}/system/status", headers={"X-Api-Key": keys["PROWLARR_API_KEY"]})
-            print("✓ All services are online and responding.")
-            return True
-        except Exception:
+    print("Checking responsiveness of active services...")
+    active_services = []
+    # Test each service quickly
+    for service_name, url, key_name in [
+        ("Sonarr", SONARR_URL, "SONARR_API_KEY"),
+        ("Radarr", RADARR_URL, "RADARR_API_KEY"),
+        ("Prowlarr", PROWLARR_URL, "PROWLARR_API_KEY"),
+    ]:
+        key = keys.get(key_name)
+        if key and is_service_online(url, key):
+            active_services.append(service_name)
+
+    if not active_services:
+        # Give services up to 15 seconds if just booted
+        for _ in range(8):
+            for service_name, url, key_name in [
+                ("Sonarr", SONARR_URL, "SONARR_API_KEY"),
+                ("Radarr", RADARR_URL, "RADARR_API_KEY"),
+                ("Prowlarr", PROWLARR_URL, "PROWLARR_API_KEY"),
+            ]:
+                key = keys.get(key_name)
+                if key and service_name not in active_services and is_service_online(url, key):
+                    active_services.append(service_name)
+            if active_services:
+                break
             time.sleep(2)
+
+    if active_services:
+        print(f"✓ Active services detected: {', '.join(active_services)}")
+        return True
     return False
 
 
@@ -140,39 +177,47 @@ def configure_download_client(api_url, api_key, app_name, category):
 def configure_prowlarr_apps(prowlarr_key, sonarr_key, radarr_key):
     print("Linking Sonarr and Radarr applications into Prowlarr...")
     headers = {"X-Api-Key": prowlarr_key}
+    existing_apps = make_request(f"{PROWLARR_URL}/applications", headers=headers)
+    existing_names = {app.get("name") for app in existing_apps}
     schema_list = make_request(f"{PROWLARR_URL}/applications/schema", headers=headers)
 
     # Link Sonarr
     if sonarr_key:
-        schema = find_schema(schema_list, implementation="Sonarr")
-        if schema:
-            for field in schema["fields"]:
-                if field["name"] == "prowlarrUrl":
-                    field["value"] = "http://prowlarr:9696"
-                elif field["name"] == "baseUrl":
-                    field["value"] = "http://sonarr:8989"
-                elif field["name"] == "apiKey":
-                    field["value"] = sonarr_key
-            schema["name"] = "Sonarr"
-            schema["syncLevel"] = "fullSync"
-            make_request(f"{PROWLARR_URL}/applications", method="POST", headers=headers, data=schema)
-            print("✓ Linked Sonarr in Prowlarr.")
+        if "Sonarr" in existing_names:
+            print("✓ Sonarr is already linked in Prowlarr.")
+        else:
+            schema = find_schema(schema_list, implementation="Sonarr")
+            if schema:
+                for field in schema["fields"]:
+                    if field["name"] == "prowlarrUrl":
+                        field["value"] = "http://prowlarr:9696"
+                    elif field["name"] == "baseUrl":
+                        field["value"] = "http://sonarr:8989"
+                    elif field["name"] == "apiKey":
+                        field["value"] = sonarr_key
+                schema["name"] = "Sonarr"
+                schema["syncLevel"] = "fullSync"
+                make_request(f"{PROWLARR_URL}/applications", method="POST", headers=headers, data=schema)
+                print("✓ Linked Sonarr in Prowlarr.")
 
     # Link Radarr
     if radarr_key:
-        schema = find_schema(schema_list, implementation="Radarr")
-        if schema:
-            for field in schema["fields"]:
-                if field["name"] == "prowlarrUrl":
-                    field["value"] = "http://prowlarr:9696"
-                elif field["name"] == "baseUrl":
-                    field["value"] = "http://radarr:7878"
-                elif field["name"] == "apiKey":
-                    field["value"] = radarr_key
-            schema["name"] = "Radarr"
-            schema["syncLevel"] = "fullSync"
-            make_request(f"{PROWLARR_URL}/applications", method="POST", headers=headers, data=schema)
-            print("✓ Linked Radarr in Prowlarr.")
+        if "Radarr" in existing_names:
+            print("✓ Radarr is already linked in Prowlarr.")
+        else:
+            schema = find_schema(schema_list, implementation="Radarr")
+            if schema:
+                for field in schema["fields"]:
+                    if field["name"] == "prowlarrUrl":
+                        field["value"] = "http://prowlarr:9696"
+                    elif field["name"] == "baseUrl":
+                        field["value"] = "http://radarr:7878"
+                    elif field["name"] == "apiKey":
+                        field["value"] = radarr_key
+                schema["name"] = "Radarr"
+                schema["syncLevel"] = "fullSync"
+                make_request(f"{PROWLARR_URL}/applications", method="POST", headers=headers, data=schema)
+                print("✓ Linked Radarr in Prowlarr.")
 
 
 def configure_prowlarr_indexers(prowlarr_key):
@@ -221,6 +266,18 @@ def update_env_keys(keys):
         f.write(content)
 
 
+def configure_root_folder(api_url, api_key, app_name, folder_path):
+    headers = {"X-Api-Key": api_key}
+    try:
+        existing = make_request(f"{api_url}/rootfolder", headers=headers)
+        if any(rf.get("path") == folder_path for rf in existing):
+            return
+        make_request(f"{api_url}/rootfolder", method="POST", headers=headers, data={"path": folder_path})
+        print(f"✓ Configured root folder '{folder_path}' in {app_name}.")
+    except Exception as e:
+        print(f"Could not set root folder for {app_name}: {e}")
+
+
 def main():
     keys = extract_or_load_keys()
     if not any(keys.values()):
@@ -234,16 +291,20 @@ def main():
         print("Could not connect to services. Provisioning deferred.", file=sys.stderr)
         return 1
 
-    if keys.get("SONARR_API_KEY"):
+    if keys.get("SONARR_API_KEY") and is_service_online(SONARR_URL, keys["SONARR_API_KEY"]):
+        configure_root_folder(SONARR_URL, keys["SONARR_API_KEY"], "Sonarr", "/data/tv")
         configure_download_client(SONARR_URL, keys["SONARR_API_KEY"], "Sonarr", "tv")
-    if keys.get("RADARR_API_KEY"):
+    if keys.get("RADARR_API_KEY") and is_service_online(RADARR_URL, keys["RADARR_API_KEY"]):
+        configure_root_folder(RADARR_URL, keys["RADARR_API_KEY"], "Radarr", "/data/movies")
         configure_download_client(RADARR_URL, keys["RADARR_API_KEY"], "Radarr", "movies")
 
-    if keys.get("PROWLARR_API_KEY"):
-        configure_prowlarr_apps(keys["PROWLARR_API_KEY"], keys.get("SONARR_API_KEY"), keys.get("RADARR_API_KEY"))
+    if keys.get("PROWLARR_API_KEY") and is_service_online(PROWLARR_URL, keys["PROWLARR_API_KEY"]):
+        sonarr_k = keys.get("SONARR_API_KEY") if is_service_online(SONARR_URL, keys.get("SONARR_API_KEY")) else None
+        radarr_k = keys.get("RADARR_API_KEY") if is_service_online(RADARR_URL, keys.get("RADARR_API_KEY")) else None
+        configure_prowlarr_apps(keys["PROWLARR_API_KEY"], sonarr_k, radarr_k)
         configure_prowlarr_indexers(keys["PROWLARR_API_KEY"])
 
-    print("\n🎉 Provisioning complete! All safe indexers and download client links are ready.")
+    print("\n🎉 Provisioning complete! All running services and indexers are configured.")
     return 0
 
 

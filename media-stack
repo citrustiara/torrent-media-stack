@@ -5,28 +5,98 @@ STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$STACK_DIR/.env"
 ENV_EXAMPLE="$STACK_DIR/.env.example"
 
+ALL_SERVICES=("qbittorrent" "prowlarr" "sonarr" "radarr" "jellyseerr" "jellyfin")
+
 show_help() {
-  echo "Usage: ./media-stack <command> [options]"
+  echo "Usage: ./media-stack <command> [services/presets] [options]"
   echo ""
   echo "Commands:"
-  echo "  init [--dest <path>]    Initialize stack configuration & media destination folder"
-  echo "  up                      Start Docker services & auto-provision safe indexers"
-  echo "  down                    Stop Docker services"
-  echo "  status                  Check stack health and print Web UI access links"
-  echo "  logs                    Tail container logs"
-  echo "  request <name>          Request TV series / Anime"
-  echo "  request-movie <name>    Request Movie"
-  echo "  request-game <name>     Search & download PC Game (FitGirl/DODI repacks/ISOs)"
-  echo "  search <name>           Interactively search releases (Anime, TV, Movies, Games)"
+  echo "  init [--dest <path>]             Initialize stack configuration & media storage"
+  echo "  up [services...] [options]       Start selected or all Docker services"
+  echo "  down [services...]               Stop selected or all Docker services"
+  echo "  restart [services...]            Restart selected or all Docker services"
+  echo "  status                           Check stack health & print active Web UI links"
+  echo "  logs [services...]               Tail container logs"
+  echo "  request <name>                   Request TV series / Anime"
+  echo "  request-movie <name>             Request Movie"
+  echo "  request-game <name>              Search & download PC Game (FitGirl/DODI repacks/ISOs)"
+  echo "  search <name>                    Interactively search releases (Anime, TV, Movies, Games)"
+  echo ""
+  echo "Presets for 'up' / 'down':"
+  echo "  minimal | core                   qbittorrent + prowlarr (quick searches & downloads)"
+  echo "  arr | automation                 qbittorrent + prowlarr + sonarr + radarr"
+  echo "  streaming | player               jellyfin + jellyseerr"
+  echo "  all (default)                    All 6 services"
+  echo ""
+  echo "Individual Services & Aliases:"
+  echo "  qbittorrent (qbit), prowlarr (prowl), sonarr, radarr, jellyseerr (seerr), jellyfin (jelly)"
+  echo ""
+  echo "Examples:"
+  echo "  ./media-stack up minimal         # Only starts qBittorrent & Prowlarr"
+  echo "  ./media-stack up qbit prowlarr   # Starts specific containers"
+  echo "  ./media-stack up --no-provision  # Starts without running provisioner script"
+  echo "  ./media-stack down sonarr        # Stops only Sonarr"
   echo ""
 }
 
-if [ -z "$1" ]; then
+# Resolve aliases and presets to actual Docker compose service names
+resolve_services() {
+  local input=("$@")
+  local resolved=()
+
+  for item in "${input[@]}"; do
+    IFS=',' read -ra ADDR <<< "$item"
+    for sub in "${ADDR[@]}"; do
+      case "$(echo "$sub" | tr '[:upper:]' '[:lower:]')" in
+        minimal|core|basic)
+          resolved+=("qbittorrent" "prowlarr")
+          ;;
+        arr|automation)
+          resolved+=("qbittorrent" "prowlarr" "sonarr" "radarr")
+          ;;
+        streaming|player)
+          resolved+=("jellyfin" "jellyseerr")
+          ;;
+        all)
+          resolved+=("${ALL_SERVICES[@]}")
+          ;;
+        qbit|qbittorrent)
+          resolved+=("qbittorrent")
+          ;;
+        prowl|prowlarr)
+          resolved+=("prowlarr")
+          ;;
+        sonarr)
+          resolved+=("sonarr")
+          ;;
+        radarr)
+          resolved+=("radarr")
+          ;;
+        seerr|jellyseerr)
+          resolved+=("jellyseerr")
+          ;;
+        jelly|jellyfin)
+          resolved+=("jellyfin")
+          ;;
+        *)
+          echo "Warning: Unknown service or preset '$sub' (skipping)" >&2
+          ;;
+      esac
+    done
+  done
+
+  printf "%s\n" "${resolved[@]}" | sort -u
+}
+
+if [ -z "$1" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
   show_help
   exit 0
 fi
 
-case "$1" in
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
   init)
     DEST_DIR=""
     while [[ $# -gt 0 ]]; do
@@ -46,7 +116,6 @@ case "$1" in
       DEST_DIR="${DEST_DIR:-./data}"
     fi
 
-    # Expand tilde or relative paths to absolute
     DEST_DIR=$(eval echo "$DEST_DIR")
     mkdir -p "$DEST_DIR/movies" "$DEST_DIR/tv" "$DEST_DIR/anime" "$DEST_DIR/games" "$DEST_DIR/torrents"
     ABS_DEST="$(cd "$DEST_DIR" && pwd)"
@@ -55,7 +124,6 @@ case "$1" in
       cp "$ENV_EXAMPLE" "$ENV_FILE"
     fi
 
-    # Replace or set MEDIA_ROOT in .env
     if grep -q "^MEDIA_ROOT=" "$ENV_FILE"; then
       sed -i.bak "s|^MEDIA_ROOT=.*|MEDIA_ROOT=$ABS_DEST|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
     else
@@ -72,16 +140,73 @@ case "$1" in
       "$0" init --dest ./data
     fi
 
-    echo "Starting Docker Compose services..."
-    docker compose -f "$STACK_DIR/docker-compose.yml" up -d
+    TARGET_SERVICES=()
+    NO_PROVISION=0
 
-    echo "Running automatic stack provisioner..."
-    python3 "$STACK_DIR/scripts/provision_stack.py"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --no-provision)
+          NO_PROVISION=1
+          shift
+          ;;
+        --only|--services)
+          TARGET_SERVICES+=("$2")
+          shift 2
+          ;;
+        *)
+          TARGET_SERVICES+=("$1")
+          shift
+          ;;
+      esac
+    done
+
+    FINAL_SERVICES=()
+    if [ ${#TARGET_SERVICES[@]} -eq 0 ]; then
+      FINAL_SERVICES=("${ALL_SERVICES[@]}")
+    else
+      while IFS= read -r s; do
+        [[ -n "$s" ]] && FINAL_SERVICES+=("$s")
+      done < <(resolve_services "${TARGET_SERVICES[@]}")
+    fi
+
+    if [ ${#FINAL_SERVICES[@]} -eq 0 ]; then
+      echo "Error: No valid services specified to start."
+      exit 1
+    fi
+
+    echo "Starting Docker Compose services: ${FINAL_SERVICES[*]}..."
+    docker compose -f "$STACK_DIR/docker-compose.yml" up -d "${FINAL_SERVICES[@]}"
+
+    if [ "$NO_PROVISION" -eq 0 ]; then
+      echo "Running automatic stack provisioner for active services..."
+      python3 "$STACK_DIR/scripts/provision_stack.py" || true
+    fi
     ;;
 
   down)
-    docker compose -f "$STACK_DIR/docker-compose.yml" down
-    echo "✓ Stopped all media stack services."
+    if [ $# -eq 0 ]; then
+      echo "Stopping all media stack services..."
+      docker compose -f "$STACK_DIR/docker-compose.yml" down
+      echo "✓ Stopped all media stack services."
+    else
+      TARGET_SERVICES=()
+      while IFS= read -r s; do
+        [[ -n "$s" ]] && TARGET_SERVICES+=("$s")
+      done < <(resolve_services "$@")
+
+      if [ ${#TARGET_SERVICES[@]} -gt 0 ]; then
+        echo "Stopping services: ${TARGET_SERVICES[*]}..."
+        docker compose -f "$STACK_DIR/docker-compose.yml" stop "${TARGET_SERVICES[@]}"
+        echo "✓ Stopped: ${TARGET_SERVICES[*]}"
+      else
+        docker compose -f "$STACK_DIR/docker-compose.yml" down
+      fi
+    fi
+    ;;
+
+  restart)
+    "$0" down "$@"
+    "$0" up "$@"
     ;;
 
   status)
@@ -98,7 +223,15 @@ case "$1" in
     ;;
 
   logs)
-    docker compose -f "$STACK_DIR/docker-compose.yml" logs -f
+    if [ $# -eq 0 ]; then
+      docker compose -f "$STACK_DIR/docker-compose.yml" logs -f
+    else
+      TARGET_SERVICES=()
+      while IFS= read -r s; do
+        [[ -n "$s" ]] && TARGET_SERVICES+=("$s")
+      done < <(resolve_services "$@")
+      docker compose -f "$STACK_DIR/docker-compose.yml" logs -f "${TARGET_SERVICES[@]}"
+    fi
     ;;
 
   request|request-movie|request-game|search)

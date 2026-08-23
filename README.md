@@ -228,11 +228,30 @@ To set an optional maximum file size limit in GB:
 ## 🛠️ Stack Management Commands
 
 ```bash
-./media-stack init --dest /path  # Set destination folder & create structure
-./media-stack up                 # Launch Docker containers & auto-provision indexers
-./media-stack down               # Stop all stack services
-./media-stack status             # Display health status & access URLs
-./media-stack logs               # View combined container output logs
+# Initialize destination folder & create folder structure
+./media-stack init --dest /path
+
+# Launch all 6 services (default)
+./media-stack up
+
+# Launch selective services or presets (saves memory & CPU!)
+./media-stack up minimal             # Only starts qBittorrent & Prowlarr (core downloader/search)
+./media-stack up arr                 # Starts qBittorrent, Prowlarr, Sonarr, Radarr (automation)
+./media-stack up streaming           # Starts Jellyfin & Jellyseerr
+./media-stack up qbit prowlarr       # Specify exact containers or aliases
+./media-stack up --no-provision      # Start without running the auto-provisioner script
+
+# Stop all or specific services
+./media-stack down                   # Stop all media stack services
+./media-stack down sonarr radarr     # Stop only specific containers
+./media-stack down minimal           # Stop minimal preset containers
+
+# Check health and view active Web UI links
+./media-stack status
+
+# View live container output logs
+./media-stack logs                   # All containers
+./media-stack logs qbittorrent       # Specific container
 ```
 
 ---

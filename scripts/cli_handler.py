@@ -68,13 +68,38 @@ def add_to_qbittorrent(magnet_or_url, category="tv", save_path=None):
         print(f"qBittorrent login failed: {e}", file=sys.stderr)
         return False
 
-    params = {"urls": magnet_or_url, "category": category}
-    if save_path:
-        params["savepath"] = save_path
-
-    add_data = urllib.parse.urlencode(params).encode("utf-8")
     try:
-        opener.open(urllib.request.Request(f"{QBIT_URL}/api/v2/torrents/add", data=add_data)).read()
+        if magnet_or_url.startswith("http://") or magnet_or_url.startswith("https://"):
+            # Fetch torrent file bytes first if it is a URL
+            req = urllib.request.Request(magnet_or_url)
+            torrent_bytes = urllib.request.urlopen(req).read()
+            boundary = "----WebKitFormBoundaryMediaStackCLI"
+            body = bytearray()
+            body.extend(f"--{boundary}\r\n".encode("utf-8"))
+            body.extend(f'Content-Disposition: form-data; name="category"\r\n\r\n{category}\r\n'.encode("utf-8"))
+            if save_path:
+                body.extend(f"--{boundary}\r\n".encode("utf-8"))
+                body.extend(f'Content-Disposition: form-data; name="savepath"\r\n\r\n{save_path}\r\n'.encode("utf-8"))
+            body.extend(f"--{boundary}\r\n".encode("utf-8"))
+            body.extend(b'Content-Disposition: form-data; name="torrents"; filename="download.torrent"\r\nContent-Type: application/x-bittorrent\r\n\r\n')
+            body.extend(torrent_bytes)
+            body.extend(b"\r\n")
+            body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+
+            add_req = urllib.request.Request(
+                f"{QBIT_URL}/api/v2/torrents/add",
+                data=body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                method="POST"
+            )
+            opener.open(add_req).read()
+        else:
+            params = {"urls": magnet_or_url, "category": category}
+            if save_path:
+                params["savepath"] = save_path
+            add_data = urllib.parse.urlencode(params).encode("utf-8")
+            opener.open(urllib.request.Request(f"{QBIT_URL}/api/v2/torrents/add", data=add_data)).read()
+
         print(f"✓ Download queued successfully in qBittorrent under category '{category}'!")
         return True
     except Exception as e:
